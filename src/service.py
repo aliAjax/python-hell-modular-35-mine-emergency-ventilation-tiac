@@ -1,6 +1,7 @@
 import hashlib
 from uuid import uuid4
 
+from .air import AirLedger
 from .audit import AuditTrail
 from .domain import ConflictError, NotFoundError, PermissionDenied, ValidationError
 from .rules import RuleEngine
@@ -11,6 +12,11 @@ class DomainService:
         self.repository = repository
         self.rules = rules or RuleEngine()
         self.audit = AuditTrail(repository)
+        self.air = AirLedger(repository, self.rules)
+
+    def backfill_air_capacity(self, actor=None):
+        """升级场景：旧数据没有风量记录时，按在运行风机容量回填一次。"""
+        return self.air.backfill_capacity(actor)
 
     def _lookup(self, kind, field, value):
         return self.repository.find_entities(self.rules.normalize_kind(kind), field, value)

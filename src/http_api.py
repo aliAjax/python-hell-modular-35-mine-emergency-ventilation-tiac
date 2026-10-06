@@ -84,6 +84,10 @@ def create_handler(service, rules, static_dir):
                         return self._send_html(200, handle.read())
                 if parts == ["api", "audit"]:
                     return self._send(200, {"items": service.audit_log()})
+                if parts == ["api", "air", "ledger"]:
+                    return self._send(200, service.air.ledger())
+                if parts == ["api", "air", "loans"]:
+                    return self._send(200, {"items": service.air.store.list_loans()})
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     return self._send(200, service.get(parts[2]))
                 if len(parts) >= 2 and parts[0] == "api" and parts[1] != "entities":
@@ -104,6 +108,38 @@ def create_handler(service, rules, static_dir):
                 if parts == ["api", "offline-records"]:
                     body = self._body()
                     return self._send(200, {"items": service.merge_offline(actor, body.get("records", []))})
+                if parts == ["api", "air", "zones"]:
+                    body = self._body()
+                    return self._send(201, service.air.register_zone(
+                        actor, body.get("area_code"), body.get("approved_demand"), body.get("id")))
+                if len(parts) == 5 and parts[:3] == ["api", "air", "zones"]:
+                    body = self._body()
+                    if parts[4] == "alarm":
+                        return self._send(200, service.air.change_alarm(actor, parts[3], body.get("alarm")))
+                    if parts[4] == "requests":
+                        return self._send(201, service.air.submit_request(
+                            actor, parts[3], body.get("amount"), body.get("id")))
+                    raise NotFoundError("not found")
+                if len(parts) == 4 and parts[:2] == ["api", "air"] and parts[2] == "zones":
+                    body = self._body()
+                    return self._send(200, service.air.update_demand(
+                        actor, parts[3], body.get("approved_demand")))
+                if parts == ["api", "air", "yields"]:
+                    body = self._body()
+                    return self._send(200, service.air.yield_air(
+                        actor, body.get("donor_id"), body.get("receiver_id"),
+                        body.get("amount"), self.headers.get("Yield-Key") or body.get("yield_key")))
+                if parts == ["api", "air", "capacity"]:
+                    body = self._body()
+                    return self._send(200, service.air.set_capacity(actor, body.get("capacity")))
+                if parts == ["api", "air", "capacity", "backfill"]:
+                    return self._send(200, service.air.backfill_capacity(actor))
+                if len(parts) == 4 and parts[:2] == ["api", "air"] and parts[2] == "requests":
+                    body = self._body()
+                    if parts[3] == "cancel":
+                        request_id = body.get("request_id")
+                        return self._send(200, service.air.cancel_request(actor, request_id))
+                    raise NotFoundError("not found")
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     body = self._body()
                     action = body.pop("action", None)

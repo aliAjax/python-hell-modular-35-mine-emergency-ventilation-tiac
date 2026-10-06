@@ -18,6 +18,9 @@ def main(argv=None):
     repository = SQLiteRepository(args.db)
     rules = RuleEngine()
     service = DomainService(repository, rules)
+    # 升级回填：旧数据没有风量记录时，按在运行风机容量之和建立公共账（已回填则不覆盖）。
+    # 首次启动尚未录入风机时记容量 0；之后补录风机再调用 backfill 仍可回填一次。
+    service.backfill_air_capacity()
     static_dir = Path(__file__).resolve().parent / "static"
     server = create_server(args.host, args.port, service, rules, str(static_dir))
 
