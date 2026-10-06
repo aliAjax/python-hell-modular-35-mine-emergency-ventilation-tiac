@@ -82,6 +82,8 @@ def create_handler(service, rules, static_dir):
                     index = os.path.join(static_dir, "index.html")
                     with open(index, "r", encoding="utf-8") as handle:
                         return self._send_html(200, handle.read())
+                if parts == ["api", "ledger"]:
+                    return self._send(200, service.ledger_view())
                 if parts == ["api", "audit"]:
                     return self._send(200, {"items": service.audit_log()})
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
@@ -104,6 +106,43 @@ def create_handler(service, rules, static_dir):
                 if parts == ["api", "offline-records"]:
                     body = self._body()
                     return self._send(200, {"items": service.merge_offline(actor, body.get("records", []))})
+                if parts == ["api", "ledger", "areas"]:
+                    body = self._body()
+                    return self._send(
+                        201,
+                        service.create_area(
+                            actor,
+                            body.get("area_code"),
+                            body.get("name"),
+                            body.get("approved_demand"),
+                        ),
+                    )
+                if len(parts) == 4 and parts[:3] == ["api", "ledger", "areas"] and parts[3] != "alarm":
+                    raise NotFoundError("not found")
+                if len(parts) == 5 and parts[:3] == ["api", "ledger", "areas"] and parts[4] == "alarm":
+                    body = self._body()
+                    return self._send(
+                        200,
+                        service.set_area_alarm(actor, parts[3], body.get("alarm_level")),
+                    )
+                if parts == ["api", "ledger", "transfers"]:
+                    body = self._body()
+                    return self._send(
+                        201,
+                        service.request_transfer(
+                            actor,
+                            body.get("from_area"),
+                            body.get("to_area"),
+                            body.get("amount"),
+                            body.get("reason"),
+                        ),
+                    )
+                if len(parts) == 5 and parts[:3] == ["api", "ledger", "transfers"] and parts[4] == "recall":
+                    return self._send(200, service.recall_transfer(actor, parts[3]))
+                if parts == ["api", "ledger", "recompute"]:
+                    return self._send(200, {"items": service._recompute(actor)})
+                if parts == ["api", "ledger", "backfill"]:
+                    return self._send(200, service.backfill_ledger(actor))
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     body = self._body()
                     action = body.pop("action", None)

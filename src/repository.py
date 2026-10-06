@@ -143,6 +143,38 @@ class SQLiteRepository:
             connection.close()
         return self.get_entity(entity_id)
 
+    def replace_quota_ledger(self, revocations, creations):
+        """Atomically replace current quota entries with a new allocation.
+
+        ``revocations`` is a list of ``(entity_id, expected_version)`` pairs; each
+        row is only deleted when its version still matches, otherwise the whole
+        transaction is rolled back with :class:`ConflictError`. ``creations`` is a
+        list of ``(entity_id, kind, status, data, actor_id)`` rows to insert.
+        Voided occupations are removed here; the audit log keeps the history.
+        """
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                for entity_id, expected_version in revocations:
+                    cursor = connection.execute(
+                        "DELETE FROM entities WHERE id = ? AND version = ?",
+                        (entity_id, expected_version),
+                    )
+                    if cursor.rowcount == 0:
+                        raise ConflictError(
+                            "ledger entry was modified concurrently: " + entity_id
+                        )
+                for entity_id, kind, status, data, actor_id in creations:
+                    payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
+                    connection.execute(
+                        "INSERT INTO entities(id, kind, status, version, data, created_by, created_at, updated_at) "
+                        "VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
+                        (entity_id, kind, status, payload, actor_id, utcnow(), utcnow()),
+                    )
+            except Exception:
+                connection.rollback()
+                raise
+
     def append_audit(self, entity_id, actor_id, actor_role, action, from_status, to_status, detail):
         with self._connect() as connection:
             connection.execute(

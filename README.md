@@ -39,6 +39,22 @@ curl http://127.0.0.1:8335/health
 
 创建矿井事件、人员和设备记录后，依次执行撤离、搜救、通风恢复和事件关闭。`POST /api/offline-records` 用于合并现场离线记录，`source_id + record_id` 相同会幂等返回原记录。
 
+## 风量公共账
+
+风量做成一本公共账：每个区域按核定需求占用，容量不够的申请先排队，排队顺序先看报警轻重、再看等待时间。应急加风时，高报警区域可从较低级别的区域让出一部分风量（记为一笔可收回的让渡）；被让出的区域随后自己报警，立即收回让渡、整账按新等级重算，受让方退回队列等候。两名调度同时提交同一笔让渡时，先落账的生效，写入冲突后按原申请重试。旧数据没有风量记录，升级时按在运行风机的容量回填。
+
+台账接口：
+
+- `GET /api/ledger`：查看容量、区域、当前占用分录和让渡记录。
+- `POST /api/ledger/areas`：建区并登记核定需求，请求体含 `area_code`、`name`、`approved_demand`。
+- `POST /api/ledger/areas/<area_code>/alarm`：设置区域报警等级（`normal`/`warning`/`alarm`/`critical`），触发整账作废重算。
+- `POST /api/ledger/transfers`：提交应急让渡，请求体含 `from_area`、`to_area`、`amount`、`reason`。
+- `POST /api/ledger/transfers/<id>/recall`：收回让渡。
+- `POST /api/ledger/recompute`：手动重算整账。
+- `POST /api/ledger/backfill`：升级回填，按在运行风机容量为没有风量记录的区域建账。
+
+风机的创建、停运、恢复都会自动触发台账重算。
+
 ## 规则重点
 
 - 活跃任务按 `dedupe_key` 防止重复派工。
